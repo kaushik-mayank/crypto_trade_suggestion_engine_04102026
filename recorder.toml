@@ -1,0 +1,71 @@
+# Cold-start recorder configuration (specs/01b-recorder.md). The single config file.
+# Relative paths resolve against the directory this file lives in.
+
+data_dir = "data/raw"
+log_dir = "logs"
+env_file = ".env"
+console_log_level = "INFO"      # file log is always DEBUG (every poll, with status and latency)
+health_interval_s = 900         # one-line health summary every 15 minutes
+
+[http]
+timeout_s = 20
+# Conservative starting rates, req/s per host. Revisit once probe P2 measures real limits.
+host_rates = { "api.coindcx.com" = 2.0, "public.coindcx.com" = 2.0 }
+
+# Futures perpetuals (verified active 2026-09-18).
+[pairs]
+futures = ["B-BTC_USDT", "B-ETH_USDT", "B-SOL_USDT"]
+
+# Spot markets. `ticker_market` is the `market` field in /exchange/ticker.
+# Pair strings observed in /exchange/v1/markets_details on 2026-09-18 (ecode B, status active).
+# PROVISIONAL until probe P3 records the full ecode survey.
+[[spot]]
+pair = "B-BTC_USDT"
+ticker_market = "BTCUSDT"
+
+[[spot]]
+pair = "B-ETH_USDT"
+ticker_market = "ETHUSDT"
+
+[[spot]]
+pair = "B-SOL_USDT"
+ticker_market = "SOLUSDT"
+
+[streams.futures_rt]        # S1 — critical
+enabled = true
+interval_s = 60
+
+[streams.positioning]       # S2 — critical. P8 (findings F-019): public, plain GET works, POST is 404
+enabled = true
+interval_s = 900
+auth = "none"               # "none": no credentials sent (endpoint does not require them)
+                            # "signed": documented HMAC form; needs .env (COINDCX_API_KEY/SECRET)
+method = "GET"              # POST returns 404
+timestamp_unit = "ms"       # only used when auth = "signed"
+
+[streams.spot_ticker]       # S3
+enabled = true
+interval_s = 60
+
+[streams.instrument_meta]   # S4
+enabled = true
+interval_s = 21600
+
+[streams.futures_book]      # S5 — drop first if rate limits are tight
+enabled = true
+interval_s = 300
+depth = 50
+
+[streams.spot_book]         # S6 — drop first if rate limits are tight
+enabled = true
+interval_s = 300
+depth = 50                  # sent as lowercase `depth`; capital `Depth` returns 422 (docs/findings.md)
+
+[streams.candles]           # S7 — hourly gap-fill. Spot: all served. Futures: the spec set only; 15/30/240/480/3D/1M are also served (findings F-008) - see README decisions
+enabled = true
+interval_s = 3600
+spot_intervals = ["1m", "15m", "1h", "1d"]
+futures_resolutions = ["1", "5", "60", "1D"]
+chunk_bars = 500            # spot default page of 500 is verified; max 1000 is doc-only; futures cap unknown (P5)
+initial_bars = 499          # first-ever fetch per series (one request); full history is the backfill script's job
+max_gap_fill_days = 7       # longer outages are logged as needing the one-time backfill

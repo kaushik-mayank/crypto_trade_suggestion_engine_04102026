@@ -1,0 +1,381 @@
+{
+  "amended_after_results": false,
+  "amendment_reason": null,
+  "code_version": "0.1.0+bc63ca12ae38",
+  "cost_model": {
+    "fees": "round-trip taker fee from live InstrumentMeta, 2 * taker_fee.fraction * price. Never hardcoded: the vendor doc's sample values are wrong for BTC (hard invariant 1)",
+    "funding": "accrued per 8h interval crossed, from the live funding rate",
+    "sensitivity": "every headline result is re-run at 2x slippage. An edge that disappears there is not robust enough to deploy, because the estimate itself carries error",
+    "shared_with_live": "the same formula the risk engine charges, asserted by test rather than assumed (specs/08 acceptance criterion 10)",
+    "slippage": "a fraction of price, applied adversely on entries and stops; never on targets"
+  },
+  "created_utc": "2026-10-03T13:39:11.837884+00:00",
+  "decision_rules": {
+    "CUT": "a bespoke strategy that fails its benchmark comparison is cut, NOT tuned. Tuning until it beats the benchmark is fitting the benchmark, which is worse than having none",
+    "PROMOTE": "validated: true and validation_multiplier -> 1.0. Requires passing the \u00a77.1 test against C4-X1, the \u00a710 benchmark comparison, and the \u00a78 sensitivity check",
+    "REVISE": "permitted ONCE, and only for a defect \u2014 never because the result disappointed",
+    "confidence": "no confidence value is published anywhere until Phase 16 says so",
+    "harness_rule": "if C4-X2 backtests well, the BACKTEST is suspect, not the strategy. Audit for look-ahead, survivorship in level definitions, cost under-modelling and fill logic before accepting any other result from the same harness",
+    "random_entry_rule": "if a strategy cannot beat C4-X1 with statistical significance, its signal contributes nothing and the strategy is cut. Applies to all four classes"
+  },
+  "fill_model": {
+    "entry": "the WORSE of {trigger price, next 1m bar open}, plus slippage. Never the trigger",
+    "intrabar_ambiguity": "when one bar contains both the stop and the target, the STOP is assumed first. Always, and never resolved by selectively consulting finer data",
+    "open_at_window_end": "marked at the final close and EXCLUDED from realised statistics",
+    "stop": "if the bar's range gaps beyond the stop, the fill is the bar's OPEN, not the stop",
+    "target": "fills at the target price when the bar's range contains it; no slippage (limit order). A favourable gap beyond the target is deliberately not credited",
+    "trail": "follows the stop gap rule"
+  },
+  "hypotheses": [
+    {
+      "id": "H1",
+      "if_false": "the regime model, the strategy, or the backtest is wrong. Determining which is more valuable than the headline result and is a required deliverable",
+      "prediction": "C4-A performs poorly in Axis-P mean-reverting regime cells",
+      "source": "specs/06 \u00a74.1"
+    },
+    {
+      "id": "H2",
+      "if_false": "if the hit rate is low the mechanism is absent; if the tail is good, check the fill model before believing it",
+      "prediction": "C4-C shows a high hit rate and a poor tail",
+      "source": "specs/06 \u00a74.3"
+    },
+    {
+      "id": "H3",
+      "if_false": "for Class 2/3, the trailing exit is cutting winners; for Class 1/C4-C, the edge rests on a few lucky events",
+      "prediction": "Class 2 and Class 3 show high profit concentration; Class 1 and C4-C show low concentration",
+      "source": "specs/09 \u00a75.2"
+    },
+    {
+      "id": "H4",
+      "if_false": "the gap rule is not being applied, or the sample contains no gap events yet",
+      "prediction": "the mean realised R on stopped trades is worse than -1.0R",
+      "source": "specs/09 \u00a73.2"
+    },
+    {
+      "id": "H5",
+      "if_false": "the harness is suspect: audit before accepting any other result from it",
+      "prediction": "C4-X2 (unconditioned Bollinger touch) does NOT backtest well",
+      "source": "specs/06 \u00a75.2"
+    }
+  ],
+  "metric_definitions": {
+    "hit_rate": "count(r_multiple > 0) / n, published with its 95% Wilson score interval and n",
+    "loss_tail_p95_r": "95th percentile of |r_multiple| over losing trades, linear interpolation",
+    "mar": "sum of r_multiples / max_drawdown_r",
+    "max_drawdown_r": "largest peak-to-trough decline of the cumulative r_multiple curve, ordered by exit time; expressed in R, not percent",
+    "mean_r": "arithmetic mean of r_multiple over closed trades",
+    "median_r": "median of r_multiple over closed trades; reported alongside the mean always, because they diverge for skewed payoffs and the mean alone hides which",
+    "percentile": "linear interpolation on the sorted sample: v[floor(q(n-1))] blended with the next value by the fractional part",
+    "r_multiple": "(exit_price - entry_price) * sign(direction) / |entry_price - initial_stop|, weighted across partial exits; initial_stop is fixed at entry and never updated",
+    "sharpe_per_trade": "mean_r / stdev_r over closed trades. REJECTED as sufficient output",
+    "sortino_per_trade": "mean_r / stdev of negative r_multiples only",
+    "stopped_mean_r": "mean r_multiple over trades exited by stop or trail. If materially worse than -1.0R, real risk exceeds published risk and liq_safety is re-derived",
+    "top5_dependency": "sum of the 5 largest r_multiples / sum of all r_multiples",
+    "top_decile_share": "sum of the largest ceil(n/10) r_multiples / sum of all r_multiples",
+    "wilson_interval": "((p + z^2/2n) +/- z*sqrt(p(1-p)/n + z^2/4n^2)) / (1 + z^2/n), z = 1.96"
+  },
+  "parameter_hash": "44136edb61d59e16389a1bd94120cb19a0bc2712e5143fb11f3985f5bac02f12",
+  "parameter_set": {
+    "act_trigger_multiple": {
+      "band": [
+        0.3,
+        1.0
+      ],
+      "id": 17,
+      "source_spec": "specs/03 \u00a710 #17",
+      "status": "provisional",
+      "unit": "ATR multiples",
+      "value": 0.65
+    },
+    "basis_timestamp_tolerance_s": {
+      "band": "none \u2014 measured, not chosen",
+      "id": 16,
+      "source_spec": "specs/02 \u00a710 #16, specs/02 Family 6",
+      "status": "fixed",
+      "unit": "seconds",
+      "value": 2
+    },
+    "class3_multiplier": {
+      "band": [
+        0.4,
+        0.7
+      ],
+      "id": 28,
+      "source_spec": "specs/08 \u00a711 #28, specs/08 \u00a73",
+      "status": "provisional",
+      "unit": "size multiplier",
+      "value": 0.5
+    },
+    "contraction_percentile": {
+      "band": [
+        0.1,
+        0.25
+      ],
+      "id": 25,
+      "source_spec": "specs/05 \u00a710 #25",
+      "status": "provisional",
+      "unit": "percentile of the trailing VOL_RATIO distribution",
+      "value": 0.15
+    },
+    "correlation_floor": {
+      "band": [
+        0.6,
+        0.8
+      ],
+      "id": 22,
+      "source_spec": "specs/03 \u00a710 #22",
+      "status": "provisional",
+      "unit": "Pearson correlation",
+      "value": 0.7
+    },
+    "deviation_z_threshold": {
+      "band": [
+        1.5,
+        3.0
+      ],
+      "id": 20,
+      "source_spec": "specs/03 \u00a710 #20",
+      "status": "provisional",
+      "unit": "standard deviations",
+      "value": 2.25
+    },
+    "efficiency_ratio_floor": {
+      "band": [
+        0.3,
+        0.6
+      ],
+      "id": 24,
+      "source_spec": "specs/04 \u00a78 #24",
+      "status": "conditional",
+      "unit": "ratio in [0,1]",
+      "value": 0.45
+    },
+    "funding_extreme_multiple": {
+      "band": [
+        5.0,
+        30.0
+      ],
+      "id": 19,
+      "source_spec": "specs/03 \u00a710 #19",
+      "status": "provisional",
+      "unit": "multiples of baseline funding",
+      "value": 15.0
+    },
+    "liq_safety": {
+      "band": [
+        2.0,
+        4.0
+      ],
+      "id": 30,
+      "source_spec": "specs/08 \u00a711 #30, specs/08 \u00a76",
+      "status": "provisional",
+      "unit": "multiples of R beyond the stop",
+      "value": 3.0
+    },
+    "lookback_1d_long": {
+      "band": "none \u2014 calendar logic (~1 quarter)",
+      "id": 9,
+      "source_spec": "specs/02 \u00a74",
+      "status": "fixed",
+      "unit": "bars",
+      "value": 90
+    },
+    "lookback_1d_medium": {
+      "band": "none \u2014 calendar logic (~1 month)",
+      "id": 8,
+      "source_spec": "specs/02 \u00a74",
+      "status": "fixed",
+      "unit": "bars",
+      "value": 30
+    },
+    "lookback_1d_short": {
+      "band": "none \u2014 calendar logic (1 week)",
+      "id": 7,
+      "source_spec": "specs/02 \u00a74",
+      "status": "fixed",
+      "unit": "bars",
+      "value": 7
+    },
+    "lookback_1h_long": {
+      "band": "none \u2014 calendar logic (~1 month)",
+      "id": 3,
+      "source_spec": "specs/02 \u00a74",
+      "status": "fixed",
+      "unit": "bars",
+      "value": 720
+    },
+    "lookback_1h_medium": {
+      "band": "none \u2014 calendar logic (1 week)",
+      "id": 2,
+      "source_spec": "specs/02 \u00a74",
+      "status": "fixed",
+      "unit": "bars",
+      "value": 168
+    },
+    "lookback_1h_short": {
+      "band": "none \u2014 calendar logic (1 day)",
+      "id": 1,
+      "source_spec": "specs/02 \u00a74",
+      "status": "fixed",
+      "unit": "bars",
+      "value": 24
+    },
+    "lookback_4h_long": {
+      "band": "none \u2014 calendar logic (~1 month)",
+      "id": 6,
+      "source_spec": "specs/02 \u00a74",
+      "status": "fixed",
+      "unit": "bars",
+      "value": 180
+    },
+    "lookback_4h_medium": {
+      "band": "none \u2014 calendar logic (1 week)",
+      "id": 5,
+      "source_spec": "specs/02 \u00a74",
+      "status": "fixed",
+      "unit": "bars",
+      "value": 42
+    },
+    "lookback_4h_short": {
+      "band": "none \u2014 calendar logic (1 day)",
+      "id": 4,
+      "source_spec": "specs/02 \u00a74",
+      "status": "fixed",
+      "unit": "bars",
+      "value": 6
+    },
+    "portfolio_vol_target": {
+      "band": "operator-set; everything in specs/08 \u00a74 is derived FROM it",
+      "id": 27,
+      "source_spec": "specs/08 \u00a711 #27",
+      "status": "user",
+      "unit": "annualised volatility, fraction",
+      "value": 0.15
+    },
+    "redundancy_rho_cut": {
+      "band": "none \u2014 conventional",
+      "id": 13,
+      "source_spec": "specs/02 \u00a710 #13",
+      "status": "fixed",
+      "unit": "absolute Spearman correlation",
+      "value": 0.8
+    },
+    "regime_min_cell_occupancy": {
+      "band": "none \u2014 fixed",
+      "id": 15,
+      "source_spec": "specs/02 \u00a710 #15",
+      "status": "fixed",
+      "unit": "fraction of training observations",
+      "value": 0.05
+    },
+    "regime_quantile_count": {
+      "band": "3 then 2 \u2014 an escalation sequence, not a search range",
+      "id": 14,
+      "source_spec": "specs/02 \u00a710 #14",
+      "status": "provisional",
+      "unit": "quantiles per axis",
+      "value": 3
+    },
+    "residual_z_threshold": {
+      "band": [
+        1.5,
+        3.0
+      ],
+      "id": 21,
+      "source_spec": "specs/03 \u00a710 #21",
+      "status": "provisional",
+      "unit": "standard deviations",
+      "value": 2.25
+    },
+    "risk_per_trade": {
+      "band": [
+        0.0025,
+        0.01
+      ],
+      "id": 26,
+      "source_spec": "specs/08 \u00a711 #26",
+      "status": "user",
+      "unit": "fraction of equity",
+      "value": 0.005
+    },
+    "stop_buffer_atr_multiple": {
+      "band": [
+        0.5,
+        1.5
+      ],
+      "id": 18,
+      "source_spec": "specs/03 \u00a710 #18",
+      "status": "provisional",
+      "unit": "ATR multiples",
+      "value": 1.0
+    },
+    "swing_atr_multiple": {
+      "band": "0.5 - 1.0 is the plausible range: below 0.5 cross-asset dispersion rises, above 1.0 the 24-bar window stops holding a confirmed pivot of each kind. A single value shared across assets and timeframes.",
+      "id": 10,
+      "source_spec": "specs/02 \u00a710 #10",
+      "status": "provisional",
+      "unit": "ATR multiples",
+      "value": 0.75
+    },
+    "swing_confirmation_bars": {
+      "band": "none \u2014 a small odd integer, not tuned",
+      "id": 11,
+      "source_spec": "specs/02 \u00a710 #11",
+      "status": "fixed",
+      "unit": "bars",
+      "value": 3
+    },
+    "trend_tstat_threshold": {
+      "band": [
+        1.5,
+        3.0
+      ],
+      "id": 23,
+      "source_spec": "specs/04 \u00a78 #23",
+      "status": "provisional",
+      "unit": "t-statistic",
+      "value": 2.0
+    },
+    "unvalidated_multiplier": {
+      "band": [
+        0.3,
+        0.6
+      ],
+      "id": 29,
+      "source_spec": "specs/08 \u00a711 #29",
+      "status": "judgment",
+      "unit": "size multiplier",
+      "value": 0.4
+    },
+    "vr_horizons": {
+      "band": "none \u2014 fixed set",
+      "id": 12,
+      "source_spec": "specs/02 \u00a710 #12",
+      "status": "fixed",
+      "unit": "periods",
+      "value": [
+        2,
+        4,
+        8
+      ]
+    }
+  },
+  "previous_sha256": null,
+  "protocol_version": 1,
+  "sha256": "b9cebff2d73218be799f2946d99201caff22e87e6f6c03b14c09a316a8015af7",
+  "trial_count_declared": 38,
+  "window_boundaries": {
+    "holdout": {
+      "end_utc": "2026-09-30T23:59:59+00:00",
+      "start_utc": "2026-04-01T00:00:00+00:00"
+    },
+    "train": {
+      "end_utc": "2025-06-30T23:59:59+00:00",
+      "start_utc": "2023-08-01T00:00:00+00:00"
+    },
+    "validate": {
+      "end_utc": "2026-03-31T23:59:59+00:00",
+      "start_utc": "2025-07-01T00:00:00+00:00"
+    }
+  }
+}

@@ -1,0 +1,100 @@
+{
+  "asset": "B-BTC_USDT",
+  "axis_definitions": {
+    "P": "MR_VR_K2",
+    "V": "VOL_RATIO"
+  },
+  "degraded": true,
+  "dwell_statistics": {},
+  "failed_tests": [
+    "persistence",
+    "persistence"
+  ],
+  "fitted_on_window": [
+    1775412000000,
+    1789812000000
+  ],
+  "grid": 1,
+  "model_version": "degraded-2x2-267fcaed8df5",
+  "notes": "the discretised regime model is unusable at every granularity tried (3x3, 2x2). Degraded mode: raw-axis thresholds still apply; the dwell-stability conditions and regime_persistence_prob do not. This is a substantive finding about this market at this horizon and belongs in docs/findings.md (specs/12 \u00a710).",
+  "occupancy": {},
+  "quantile_lookback": 720,
+  "separation_horizon_bars": 24,
+  "transition_matrix": {},
+  "usable": false,
+  "validity_test_results": [
+    {
+      "cells_expected": 9,
+      "cells_occupied": 9,
+      "detail": "all 9 cells hold at least 5% of observations",
+      "name": "occupancy",
+      "passed": true,
+      "statistic": 0.0864,
+      "thin_cells": {},
+      "threshold": 0.05
+    },
+    {
+      "detail": "median dwell 2.00 bars -- a label that flips this often is a noisy indicator, not a regime",
+      "name": "persistence",
+      "passed": false,
+      "per_cell_median_dwell": {
+        "0,0": 2.0,
+        "0,1": 1.0,
+        "0,2": 3.0,
+        "1,0": 2.0,
+        "1,1": 1.0,
+        "1,2": 3.0,
+        "2,0": 1.0,
+        "2,1": 2.0,
+        "2,2": 3.0
+      },
+      "runs": 813,
+      "statistic": 2.0,
+      "threshold": 3.0
+    },
+    {
+      "detail": "Kruskal-Wallis H=80.30, p=4.255e-14 across 9 cells",
+      "forward_horizon_bars": 24,
+      "groups_compared": 9,
+      "h_statistic": 80.2997,
+      "name": "separation",
+      "passed": true,
+      "statistic": 0.0,
+      "threshold": 0.05
+    },
+    {
+      "cells_expected": 4,
+      "cells_occupied": 4,
+      "detail": "all 4 cells hold at least 5% of observations",
+      "name": "occupancy",
+      "passed": true,
+      "statistic": 0.2205,
+      "thin_cells": {},
+      "threshold": 0.05
+    },
+    {
+      "detail": "median dwell 2.00 bars -- a label that flips this often is a noisy indicator, not a regime",
+      "name": "persistence",
+      "passed": false,
+      "per_cell_median_dwell": {
+        "0,0": 2.0,
+        "0,1": 2.0,
+        "1,0": 1.0,
+        "1,1": 4.0
+      },
+      "runs": 533,
+      "statistic": 2.0,
+      "threshold": 3.0
+    },
+    {
+      "detail": "Kruskal-Wallis H=27.31, p=5.079e-06 across 4 cells",
+      "forward_horizon_bars": 24,
+      "groups_compared": 4,
+      "h_statistic": 27.3061,
+      "name": "separation",
+      "passed": true,
+      "statistic": 5e-06,
+      "threshold": 0.05
+    }
+  ]
+}

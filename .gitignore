@@ -1,0 +1,36 @@
+# Credentials — never committed (CLAUDE.md invariant 10)
+.env
+.env.*
+!.env.example
+
+# Recorded / backfilled data and logs. data/ holds the HOLDOUT (specs/09 §1.2), which must never
+# reach a shared repository where it could be inspected before Stage 10.
+data/
+logs/
+
+# Databases and derived columnar artifacts (specs/18 §1 pre-push checklist)
+*.db
+*.db-wal
+*.db-shm
+*.parquet
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+build/
+dist/
+
+# Azure / deployment local state — never commit a subscription id, resource id or tfstate
+deploy/azure/*.local.*
+*.tfstate
+*.tfstate.*
+
+# NOT ignored, deliberately: validation/protocol.lock.json and validation/trial_count.json must be
+# committed — specs/09 §1.1 requires git history to prove the lock predates any backtest output,
+# and specs/19 §2 requires the trial counter to be append-only and public to the project.

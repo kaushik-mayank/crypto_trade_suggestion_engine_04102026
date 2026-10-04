@@ -1,0 +1,422 @@
+# THE parameter registry. specs/02 §10, specs/03 §10, specs/04 §8, specs/05 §10, specs/08 §11.
+#
+# Hard cap: 30 (raised from 25 at specs/08 §11 as a deliberate, itemised decision).
+# Adding one requires removing one or raising the cap in writing, with a justification per entry.
+#
+# `status` is load-bearing — nothing may mistake an uncalibrated value for a measured one:
+#   fixed        Structural or conventional. NOT tunable. Never swept, never changed to fit results.
+#   provisional  A placeholder inside the registered band so the system can run before Phase 16.
+#                Phase 16 Stage 6 sweeps the band and sets the final value. Must not be presented
+#                as calibrated, and `parameter_set_hash` records which value produced any signal.
+#   unset        No value yet; the phase that sets it is named in `set_by`.
+#   user         A risk-appetite choice belonging to the operator, not a property of the market.
+#   conditional  Registered only if a named condition holds (see er_min).
+#   judgment     A permanent judgment that no measurement can replace (specs/08 §11 registers
+#                exactly one: unvalidated_multiplier). Swept for sensitivity, never "set" by a phase.
+#
+# `overfitting_exposure` is copied from the spec that registered the parameter.
+
+cap = 30
+version = "1.0.0"
+
+# ---------------------------------------------------------------------------------------------
+# 1-9 — Shared lookbacks. specs/02 §4. Calendar-anchored. DO NOT TUNE.
+# "If a feature appears to need a different lookback, that is evidence about the feature,
+#  not a licence to add a parameter."
+# ---------------------------------------------------------------------------------------------
+
+[[parameter]]
+id = 1
+name = "lookback_1h_short"
+value = 24
+unit = "bars"
+status = "fixed"
+band = "none — calendar logic (1 day)"
+used_by = ["all features on 1h"]
+source_spec = "specs/02 §4"
+justification = "One day of 1h bars. Calendar-anchored, not optimised."
+overfitting_exposure = "none"
+
+[[parameter]]
+id = 2
+name = "lookback_1h_medium"
+value = 168
+unit = "bars"
+status = "fixed"
+band = "none — calendar logic (1 week)"
+used_by = ["all features on 1h"]
+source_spec = "specs/02 §4"
+justification = "One week of 1h bars."
+overfitting_exposure = "none"
+
+[[parameter]]
+id = 3
+name = "lookback_1h_long"
+value = 720
+unit = "bars"
+status = "fixed"
+band = "none — calendar logic (~1 month)"
+used_by = ["all features on 1h"]
+source_spec = "specs/02 §4"
+justification = "~One month of 1h bars. Sets the 1h warm-up requirement (1,440 bars = 2x)."
+overfitting_exposure = "none"
+
+[[parameter]]
+id = 4
+name = "lookback_4h_short"
+value = 6
+unit = "bars"
+status = "fixed"
+band = "none — calendar logic (1 day)"
+used_by = ["all features on 4h"]
+source_spec = "specs/02 §4"
+justification = "One day of 4h bars."
+overfitting_exposure = "none"
+
+[[parameter]]
+id = 5
+name = "lookback_4h_medium"
+value = 42
+unit = "bars"
+status = "fixed"
+band = "none — calendar logic (1 week)"
+used_by = ["all features on 4h"]
+source_spec = "specs/02 §4"
+justification = "One week of 4h bars."
+overfitting_exposure = "none"
+
+[[parameter]]
+id = 6
+name = "lookback_4h_long"
+value = 180
+unit = "bars"
+status = "fixed"
+band = "none — calendar logic (~1 month)"
+used_by = ["all features on 4h"]
+source_spec = "specs/02 §4"
+justification = "~One month of 4h bars."
+overfitting_exposure = "none"
+
+[[parameter]]
+id = 7
+name = "lookback_1d_short"
+value = 7
+unit = "bars"
+status = "fixed"
+band = "none — calendar logic (1 week)"
+used_by = ["all features on 1d"]
+source_spec = "specs/02 §4"
+justification = "One week of daily bars."
+overfitting_exposure = "none"
+
+[[parameter]]
+id = 8
+name = "lookback_1d_medium"
+value = 30
+unit = "bars"
+status = "fixed"
+band = "none — calendar logic (~1 month)"
+used_by = ["all features on 1d"]
+source_spec = "specs/02 §4"
+justification = "~One month of daily bars."
+overfitting_exposure = "none"
+
+[[parameter]]
+id = 9
+name = "lookback_1d_long"
+value = 90
+unit = "bars"
+status = "fixed"
+band = "none — calendar logic (~1 quarter)"
+used_by = ["all features on 1d"]
+source_spec = "specs/02 §4"
+justification = "~One quarter of daily bars. Sets the 1d warm-up requirement (180 bars = 2x)."
+overfitting_exposure = "none"
+
+# ---------------------------------------------------------------------------------------------
+# 10-16 — Feature-layer structural constants. specs/02 §10.
+# ---------------------------------------------------------------------------------------------
+
+[[parameter]]
+id = 10
+name = "swing_atr_multiple"          # theta
+value = 0.75
+unit = "ATR multiples"
+status = "provisional"
+set_by = "PHASE-27 — calibrated once on the training window by probes.swing_calibration, structurally: per-pair pivot availability, median spacing against lookback_short/2, and cross-asset density dispersion. No returns were used. See docs/findings.md F-038."
+band = "0.5 - 1.0 is the plausible range: below 0.5 cross-asset dispersion rises, above 1.0 the 24-bar window stops holding a confirmed pivot of each kind. A single value shared across assets and timeframes."
+used_by = ["STR_SWING", "STR_SEQ"]
+source_spec = "specs/02 §10 #10"
+justification = "Volatility-scaled pivot threshold. A fixed percentage would mean different things for BTC and SOL and across volatility regimes."
+overfitting_exposure = "medium — one shared value, calibrated once, never per asset"
+
+[[parameter]]
+id = 11
+name = "swing_confirmation_bars"     # k
+value = 3
+unit = "bars"
+status = "fixed"
+band = "none — a small odd integer, not tuned"
+used_by = ["STR_SWING", "STR_SEQ"]
+source_spec = "specs/02 §10 #11"
+justification = "Pivot confirmation window. Fixed small odd integer; the feature is timestamped at the confirmation bar, so this sets the structural lag."
+overfitting_exposure = "none"
+
+[[parameter]]
+id = 12
+name = "vr_horizons"                 # k in {2,4,8}
+value = [2, 4, 8]
+unit = "periods"
+status = "fixed"
+band = "none — fixed set"
+used_by = ["MR_VR"]
+source_spec = "specs/02 §10 #12"
+justification = "Variance-ratio horizons. Fixed; majority agreement across the three is what the C1-B / C2-A gates test."
+overfitting_exposure = "none"
+
+[[parameter]]
+id = 13
+name = "redundancy_rho_cut"
+value = 0.8
+unit = "absolute Spearman correlation"
+status = "fixed"
+band = "none — conventional"
+used_by = ["specs/02 §7 redundancy protocol"]
+source_spec = "specs/02 §10 #13"
+justification = "Cluster cut for the redundancy protocol. Conventional value; never adjusted to change which features survive."
+overfitting_exposure = "none"
+
+[[parameter]]
+id = 14
+name = "regime_quantile_count"
+value = 3
+unit = "quantiles per axis"
+status = "provisional"
+set_by = "PHASE-14 — determined by the specs/02 §6 validity tests (3x3, escalating to 2x2, then degraded)"
+band = "3 then 2 — an escalation sequence, not a search range"
+used_by = ["regime model"]
+source_spec = "specs/02 §10 #14"
+justification = "Starts at terciles (3x3 grid). Collapses to 2x2 if occupancy/persistence/separation fail. Determined by the tests, never chosen for results."
+overfitting_exposure = "none — outcome of a test, not a fit"
+
+[[parameter]]
+id = 15
+name = "regime_min_cell_occupancy"
+value = 0.05
+unit = "fraction of training observations"
+status = "fixed"
+band = "none — fixed"
+used_by = ["regime model validity test 1"]
+source_spec = "specs/02 §10 #15"
+justification = "Cells below 5% occupancy are collapsed and the model re-tested."
+overfitting_exposure = "none"
+
+[[parameter]]
+id = 16
+name = "basis_timestamp_tolerance_s"
+value = 2
+unit = "seconds"
+status = "fixed"
+band = "none — measured, not chosen"
+used_by = ["BAS_BPS", "BAS_Z", "DQ_DISAGREE"]
+source_spec = "specs/02 §10 #16, specs/02 Family 6"
+justification = "Hard gate on cross-source comparison. Verified appropriate: F-026 measured skew within +/-2 s and F-023 discarded only 2.3-4.5% of pairs at this tolerance. An unsynchronised basis measures elapsed time, not basis."
+overfitting_exposure = "none"
+
+# ---------------------------------------------------------------------------------------------
+# 17-22 — Class 1 + the shared ACT primitive. specs/03 §10.
+# ---------------------------------------------------------------------------------------------
+
+[[parameter]]
+id = 17
+name = "act_trigger_multiple"        # delta
+value = 0.65
+unit = "ATR multiples"
+status = "provisional"
+set_by = "PHASE-28 / specs/16 Stage 6 — swept across the band"
+band = [0.3, 1.0]
+used_by = ["ACT — C1-A", "C1-B", "C1-C", "C2-A", "C2-B", "C2-C", "C3-B", "C3-C", "C4-B"]
+source_spec = "specs/03 §10 #17"
+justification = "Arrest-confirmation distance off the adverse extreme. One shared value across nine consumers. Monotone and interpretable: higher = later entry, fewer false triggers, worse fills."
+overfitting_exposure = "low — shared, monotone. A sharp optimum is EVIDENCE OF OVERFITTING, not a better value (specs/03 §2)"
+
+[[parameter]]
+id = 18
+name = "stop_buffer_atr_multiple"    # s
+value = 1.0
+unit = "ATR multiples"
+status = "provisional"
+set_by = "PHASE-28 / specs/16 Stage 6"
+band = [0.5, 1.5]
+used_by = ["every stop and every trailing stop, all four classes"]
+source_spec = "specs/03 §10 #18"
+justification = "Stop buffer and trailing multiple, shared. Trades stop-out rate against R. Reused as the trail multiple rather than registering m_trail (specs/04 §8)."
+overfitting_exposure = "low — shared"
+
+[[parameter]]
+id = 19
+name = "funding_extreme_multiple"    # m_extreme
+value = 15.0
+unit = "multiples of baseline funding"
+status = "provisional"
+set_by = "PHASE-28 / specs/16 Stage 6"
+band = [5.0, 30.0]
+used_by = ["C1-A", "C2-C (hard partition)"]
+source_spec = "specs/03 §10 #19"
+justification = "Anchored to observed baseline funding (~0.0001, verified) and the structural +/-2% cap, not fitted to returns. Also the C1-A / C2-C partition boundary."
+overfitting_exposure = "medium — anchored to an observable baseline and a structural cap"
+
+[[parameter]]
+id = 20
+name = "deviation_z_threshold"       # z_dev
+value = 2.25
+unit = "standard deviations"
+status = "provisional"
+set_by = "PHASE-28 / specs/16 Stage 6"
+band = [1.5, 3.0]
+used_by = ["C1-B"]
+source_spec = "specs/03 §10 #20"
+justification = "Tail threshold for DEV_Z. Calibrated on the training window only."
+overfitting_exposure = "medium"
+
+[[parameter]]
+id = 21
+name = "residual_z_threshold"        # z_rs
+value = 2.25
+unit = "standard deviations"
+status = "provisional"
+set_by = "PHASE-28 / specs/16 Stage 6"
+band = [1.5, 3.0]
+used_by = ["C1-C"]
+source_spec = "specs/03 §10 #21"
+justification = "Tail threshold for the beta-adjusted residual X_RS."
+overfitting_exposure = "medium"
+
+[[parameter]]
+id = 22
+name = "correlation_floor"           # rho_floor
+value = 0.7
+unit = "Pearson correlation"
+status = "provisional"
+set_by = "PHASE-28 / specs/16 Stage 6"
+band = [0.6, 0.8]
+used_by = ["C1-C", "C2-B"]
+source_spec = "specs/03 §10 #22"
+justification = "Structural sanity bound: below it the pair relationship does not exist, so relative-value and factor logic do not apply. Not an optimisation target."
+overfitting_exposure = "low"
+
+# ---------------------------------------------------------------------------------------------
+# 23-24 — Class 2. specs/04 §8.
+# ---------------------------------------------------------------------------------------------
+
+[[parameter]]
+id = 23
+name = "trend_tstat_threshold"       # t_min
+value = 2.0
+unit = "t-statistic"
+status = "provisional"
+set_by = "PHASE-28 / specs/16 Stage 6"
+band = [1.5, 3.0]
+used_by = ["C2-A", "C2-B", "C2-C", "C3-B (partition)", "C4-A (direction filter)"]
+source_spec = "specs/04 §8 #23"
+justification = "Drift significance threshold. Has a natural interpretation as a significance level, which bounds the plausible range. Trend-decay floor is derived as t_min x 0.5, not registered separately."
+overfitting_exposure = "medium"
+
+[[parameter]]
+id = 24
+name = "efficiency_ratio_floor"      # er_min
+value = 0.45
+unit = "ratio in [0,1]"
+status = "conditional"
+condition = "Register ONLY if the specs/02 §7 redundancy protocol retains BOTH TRD_TSTAT and TRD_ER. If they collapse into one cluster, DELETE C2-A condition 4 and never register this parameter (count becomes 29)."
+set_by = "PHASE-14 decides existence; PHASE-28 sweeps it if it exists"
+band = [0.3, 0.6]
+used_by = ["C2-A condition 4"]
+source_spec = "specs/04 §8 #24"
+justification = "Path-directness floor. TRD_TSTAT and TRD_ER are an EXPECTED cluster (H9), so this parameter is provisional on the protocol's outcome."
+overfitting_exposure = "medium"
+
+# ---------------------------------------------------------------------------------------------
+# 25 — Class 3. specs/05 §10.
+# ---------------------------------------------------------------------------------------------
+
+[[parameter]]
+id = 25
+name = "contraction_percentile"      # q_contract
+value = 0.15
+unit = "percentile of the trailing VOL_RATIO distribution"
+status = "provisional"
+set_by = "PHASE-28 / specs/16 Stage 6"
+band = [0.10, 0.25]
+used_by = ["C3-A"]
+source_spec = "specs/05 §10 #25"
+justification = "Percentile-based, so it adapts to each asset's own distribution rather than encoding an absolute volatility level."
+overfitting_exposure = "medium"
+
+# ---------------------------------------------------------------------------------------------
+# 26-30 — Risk engine. specs/08 §11. THE CAP RAISE FROM 25 TO 30, itemised.
+# Three of these five carry a specified path to being replaced by measurement (28, 30) or are
+# explicitly user preferences rather than model quantities (26, 27).
+# ---------------------------------------------------------------------------------------------
+
+[[parameter]]
+id = 26
+name = "risk_per_trade"
+value = 0.005
+unit = "fraction of equity"
+status = "user"
+band = [0.0025, 0.01]
+used_by = ["risk engine sizing"]
+source_spec = "specs/08 §11 #26"
+justification = "A risk-appetite choice belonging to the operator, not a property of the market. Default set at the conservative middle of the band pending the operator's own figure (latest-updates.md Q-F)."
+overfitting_exposure = "none — not a model quantity"
+
+[[parameter]]
+id = 27
+name = "portfolio_vol_target"
+value = 0.15
+unit = "annualised volatility, fraction"
+status = "user"
+band = "operator-set; everything in specs/08 §4 is derived FROM it"
+used_by = ["risk engine portfolio constraint", "correlation haircut (derived)"]
+source_spec = "specs/08 §11 #27"
+justification = "Aggregate risk appetite. The correlation haircut falls out of this plus the measured correlation matrix, so no separate haircut parameter exists. Default is a placeholder pending the operator's figure (Q-F)."
+overfitting_exposure = "none — not a model quantity"
+
+[[parameter]]
+id = 28
+name = "class3_multiplier"
+value = 0.5
+unit = "size multiplier"
+status = "provisional"
+set_by = "PHASE-29 / specs/16 Stage 11 — recomputed as 1/sqrt(v3/v1) with v = p(1-p)(k+1)^2 from MEASURED hit rates"
+band = [0.4, 0.7]
+used_by = ["risk engine sizing, Class 3 only"]
+source_spec = "specs/08 §11 #28, specs/08 §3"
+justification = "Class 3 targets ~30% hit rate at k>=3 versus ~50% at k>=1.8 elsewhere; equalising risk contribution implies ~0.68. Set deliberately BELOW the derived figure because the derivation depends on hit rates that do not yet exist."
+overfitting_exposure = "low — replaced by measurement at Stage 11"
+
+[[parameter]]
+id = 29
+name = "unvalidated_multiplier"
+value = 0.4
+unit = "size multiplier"
+status = "judgment"
+band = [0.3, 0.6]
+used_by = ["risk engine sizing, every Tier B / unvalidated strategy"]
+source_spec = "specs/08 §11 #29"
+justification = "Model-risk judgment. No data can produce it, since it exists precisely because data is absent. The only permanent judgment among the five."
+overfitting_exposure = "none — a judgment, not a fit"
+
+[[parameter]]
+id = 30
+name = "liq_safety"
+value = 3.0
+unit = "multiples of R beyond the stop"
+status = "provisional"
+set_by = "PHASE-29 / specs/16 Stage 11 — replaced by the 99th percentile of measured adverse excursion beyond a level within one bar"
+band = [2.0, 4.0]
+used_by = ["risk engine leverage ceiling and liquidation-distance veto"]
+source_spec = "specs/08 §11 #30, specs/08 §6"
+justification = "A stop is not a guarantee; price gaps through stops and a gap reaching liquidation converts a planned 1R loss into a total loss of posted margin. Judgment until the gap distribution is measured from backfilled 1m data."
+overfitting_exposure = "low — replaced by measurement"

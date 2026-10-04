@@ -1,0 +1,6 @@
+{
+  "_purpose": "Cumulative multiple-comparison trial counter (specs/19 §2). COMMITTED, APPEND-ONLY, NEVER RESET. Every parameter evaluation, strategy modification and abandoned attempt increments it — including attempts that never reached a report. The specs/09 §7.2 BH-FDR correction at q=0.10 is only meaningful if this number is honest, and nothing but the operator can enforce that.",
+  "_increment_rules": "specs/19 §3 — Type A defect fix: no increment (the defect must be named in docs/findings.md BEFORE its fix is observed to improve results). Type B parameter change: +1. Type C strategy modification: +1. Type D new strategy: +1. Type E non-signal change (UI, logging, ops, docs): no increment.",
+  "n": 0,
+  "entries": []
+}

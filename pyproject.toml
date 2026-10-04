@@ -1,0 +1,82 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "crypto-trader"
+version = "0.1.0"
+description = "CoinDCX suggestion system — BTC/ETH/SOL, hourly/daily horizon. Never places orders."
+requires-python = ">=3.11"
+dependencies = [
+    # transport + Phase 1 (in use)
+    "requests>=2.31",
+    "pyarrow>=15",
+    # canonical types and config (specs/10 §6)
+    "pydantic>=2.6",
+    "pydantic-settings>=2.2",
+    # dataframes and numerics (specs/10 §6: Polars, no pandas mixing)
+    "polars>=0.20",
+    "numpy>=1.26",
+    "scipy>=1.12",
+    "statsmodels>=0.14",
+    # analytics over Parquet (backtest/analysis only)
+    "duckdb>=0.10",
+    # app: API + templates (specs/10 §6, specs/14, specs/15)
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "jinja2>=3.1",
+    "structlog>=24.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "hypothesis>=6.100",   # property-based tests (specs/10 §6.1)
+    "ruff>=0.4",
+    "mypy>=1.9",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM"]
+# Each ignore is a deliberate pattern in this codebase, not an unfixed warning:
+ignore = [
+    "E501",    # line length: enforced by the formatter, not the linter
+    "B905",    # zip() without strict=: every zip here is pairwise over same-length series by construction
+    "E741",    # `l` as a line variable in JSONL comprehensions — conventional and clear in context
+    "SIM115",  # open() without a context manager: the recorder deliberately holds long-lived append
+               # handles per stream/day (src/recorder/storage.py) and flushes+fsyncs per record
+    "SIM105",  # try/except/pass is clearer than contextlib.suppress in the cleanup paths here
+    "UP042",   # Kind(str, Enum) is intentional; StrEnum would change comparison semantics
+    "UP031",   # %-formatting is used once to build a payload slice without re-serialising JSON
+]
+
+[tool.mypy]
+# 3.11 is the project's minimum, but numpy's shipped stubs use 3.12 `type` statements, which mypy
+# refuses to parse when targeting 3.11 -- it aborts before checking our code at all. Checking against
+# the interpreter actually in use (3.13) is the useful check; ruff's target-version still holds the
+# 3.11 floor for syntax we write ourselves.
+python_version = "3.13"
+files = ["src"]
+ignore_missing_imports = true
+check_untyped_defs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+
+# Phase 1 modules predate type checking and are covered by 62 passing tests. Rather than churn
+# working code, each is un-ignored by the phase that next touches it (see latest-updates.md D-15).
+# Every module written from PHASE-01 onwards is checked.
+[[tool.mypy.overrides]]
+module = ["cdx_http.*", "recorder.*", "probes.*", "backfill.*"]
+ignore_errors = true
