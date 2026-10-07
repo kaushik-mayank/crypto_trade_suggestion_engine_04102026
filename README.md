@@ -3,7 +3,30 @@
 A suggestion system for BTC / ETH / SOL on CoinDCX (spot and USDT perpetuals). It **never places orders**.
 Read `CLAUDE.md` and `specs/` first. `docs/findings.md` records what has been verified against the live API.
 
-**Status:** Phase 1. The shared HTTP client, the cold-start recorder, all probes and the one-time backfill are built.
+**Status:** All 14 strategies implemented; the backtest harness is built and its protocol is locked;
+no backtest has produced results, so **nothing is validated** and every signal is marked and sized
+accordingly. See `latest-updates.md` for the phase state and the exact next action.
+
+## Hosting
+
+**→ [`HOSTING.md`](HOSTING.md)** is the step-by-step guide, written for someone who has never set up
+a server. The shape of it:
+
+```
+browser → Vercel (dashboard) → Cloudflare tunnel → Azure VM (engine)
+```
+
+The engine's API stays bound to `127.0.0.1` and **no inbound port is ever opened** — the tunnel dials
+outward. The three things that run on the VM:
+
+| Command | What it does |
+|---|---|
+| `python -m bootstrap --run` | Rebuilds price history from the API. Idempotent; safe to re-run and safe to interrupt |
+| `python -m ingest` | Keeps the database current. The only writer |
+| `python -m app --serve` | Works out suggestions and serves the API |
+
+Local data is never copied to a host: `data/` is gitignored because it holds the validation holdout,
+so a fresh machine rebuilds history itself in about 30 seconds (findings F-041).
 
 ## Setup (once)
 

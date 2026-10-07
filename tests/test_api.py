@@ -6,6 +6,7 @@ signal must never reach a response.
 """
 import json
 import time
+from pathlib import Path
 
 import pytest
 
@@ -434,3 +435,47 @@ def test_pointing_the_reader_at_a_missing_database_fails_clearly(tmp_path):
     with pytest.raises(StoreError) as ei:
         ReadOnlyStore(tmp_path / "absent.db")
     assert "never creates the database" in ei.value.remediation
+
+
+# ---- exposure through a tunnel (the Vercel dashboard) --------------------------------------
+
+def test_a_tunnel_in_front_of_loopback_still_demands_a_token():
+    """The guard that the hosted dashboard made necessary.
+
+    Binding ``127.0.0.1`` used to *mean* unreachable, so the token was only demanded for a
+    non-loopback bind. With a Cloudflare tunnel the process still binds loopback and is reachable
+    from the internet, so the original check would have passed while the API sat open. The operator
+    declares the tunnel, because only they know what is in front of the process.
+    """
+    from api.app import assert_bind_allowed
+    from core.errors import StartupError
+
+    # Loopback with no tunnel: fine, and unchanged.
+    assert_bind_allowed("127.0.0.1", "")
+
+    with pytest.raises(StartupError, match="without an auth token"):
+        assert_bind_allowed("127.0.0.1", "", public_via_tunnel=True)
+
+    assert_bind_allowed("127.0.0.1", "a-long-random-token", public_via_tunnel=True)
+
+
+def test_the_settings_guard_agrees_with_the_api_guard():
+    """Two guards, one rule. They are separate because one runs at configuration load and the other
+    at app construction, and a host should fail at the earliest of the two."""
+    from config.settings import Settings
+
+    tunnelled = Settings(server={"host": "127.0.0.1", "auth_token": "", "public_via_tunnel": True})
+    with pytest.raises(RuntimeError, match="without CT_SERVER__AUTH_TOKEN"):
+        tunnelled.assert_bind_allowed()
+
+    ok = Settings(server={"host": "127.0.0.1", "auth_token": "t" * 40, "public_via_tunnel": True})
+    ok.assert_bind_allowed()
+
+
+def test_the_token_is_compared_in_constant_time():
+    """A plain ``!=`` returns as soon as two bytes differ, so the time taken leaks how much of the
+    token was guessed. Cheap to exploit if measurable, and one import to fix."""
+    source = (Path(__file__).resolve().parents[1] / "src" / "api" / "app.py").read_text(
+        encoding="utf-8")
+    assert "secrets.compare_digest" in source
+    assert "supplied != auth_token" not in source

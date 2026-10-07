@@ -1,0 +1,46 @@
+# Process 1 of the specs/10 §3 two-process topology: the only writer to SQLite.
+#
+# Install:  sudo cp deploy/azure/*.service /etc/systemd/system/
+#           sudo systemctl daemon-reload
+#           sudo systemctl enable --now crypto-ingest
+[Unit]
+Description=crypto-trader ingest (polls CoinDCX, writes SQLite)
+Documentation=file:///opt/crypto-trader/HOSTING.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=crypto
+Group=crypto
+WorkingDirectory=/opt/crypto-trader
+EnvironmentFile=/etc/crypto-trader/env
+ExecStart=/opt/crypto-trader/.venv/bin/python -m ingest
+
+# Always restart. This process is the one that must never be down: every hour it is not running is
+# an hour of price history that has to be re-fetched, and Tier B history for that hour is gone for
+# good — it is point-in-time with no archive.
+Restart=always
+RestartSec=10
+
+# Journal only. The app writes its own structured JSON logs under /opt/crypto-trader/logs.
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=crypto-ingest
+
+# Hardening. The process needs the network, its own directory, and nothing else.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/crypto-trader/data /opt/crypto-trader/logs
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryMax=900M
+
+[Install]
+WantedBy=multi-user.target

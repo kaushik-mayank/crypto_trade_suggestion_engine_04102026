@@ -19,6 +19,7 @@ correlation id, never as a clean empty list — "no setups" and "we cannot see" 
 """
 from __future__ import annotations
 
+import secrets
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -81,8 +82,23 @@ class ResponseCache:
         self._entries.clear()
 
 
-def assert_bind_allowed(host: str, auth_token: str) -> None:
-    """specs/10 §9 / specs/14 §11. A startup failure, not a warning."""
+def assert_bind_allowed(host: str, auth_token: str, *, public_via_tunnel: bool = False) -> None:
+    """specs/10 §9 / specs/14 §11. A startup failure, not a warning.
+
+    ``public_via_tunnel`` covers the case the bind address cannot: a reverse proxy or tunnel
+    forwarding public traffic to a loopback bind. The process looks local and is not, so the token
+    becomes mandatory on the operator's declaration rather than on the address.
+    """
+    if public_via_tunnel and not auth_token:
+        raise StartupError(
+            "refusing to serve through a tunnel without an auth token",
+            component=COMPONENT, operation="assert_bind_allowed",
+            context={"host": host, "public_via_tunnel": True, "auth_token_configured": False},
+            likely_cause="a tunnel or reverse proxy forwards public traffic to this loopback bind, "
+                         "so the bind address no longer means the process is unreachable",
+            remediation="set CT_SERVER__AUTH_TOKEN to a long random value. An unguessable tunnel "
+                        "URL is obscurity, not authentication",
+        )
     localhost = host in ("127.0.0.1", "localhost", "::1")
     if not localhost and not auth_token:
         raise StartupError(
@@ -105,10 +121,10 @@ def status_code_for(result: ServiceResult) -> int:
 
 
 def create_app(*, signals: SignalService, market: MarketService, health: HealthService,
-               host: str = "127.0.0.1", auth_token: str = "",
+               host: str = "127.0.0.1", auth_token: str = "", public_via_tunnel: bool = False,
                regimes_source: Any = None, features_source: Any = None) -> Any:
-    """Build the FastAPI app. Raises before serving if the bind is not permitted."""
-    assert_bind_allowed(host, auth_token)
+    """Build the FastAPI app. Raises before serving if the exposure is not permitted."""
+    assert_bind_allowed(host, auth_token, public_via_tunnel=public_via_tunnel)
     try:
         from fastapi import FastAPI, Request
         from fastapi.responses import HTMLResponse, JSONResponse
@@ -117,7 +133,8 @@ def create_app(*, signals: SignalService, market: MarketService, health: HealthS
             "FastAPI is not installed, so the API cannot be served",
             component=COMPONENT, operation="create_app",
             likely_cause="the optional web dependencies are missing from this environment",
-            remediation="pip install -e .[web] (or install fastapi and jinja2)",
+            remediation="pip install -e . — fastapi, uvicorn and jinja2 are core dependencies, "
+                        "not an optional extra",
             cause=e,
         ) from e
 
@@ -140,7 +157,10 @@ def create_app(*, signals: SignalService, market: MarketService, health: HealthS
         """
         if auth_token:
             supplied = request.headers.get("x-auth-token", "")
-            if supplied != auth_token:
+            # Constant-time: a plain `!=` returns as soon as two bytes differ, so the time taken
+            # leaks how much of the token was guessed correctly. That is only worth a few thousand
+            # requests to an attacker who can measure it, and the fix is one import.
+            if not secrets.compare_digest(supplied, auth_token):
                 return JSONResponse({"error": {"code": "API_UNAUTHORISED",
                                                "message": "a valid x-auth-token header is required"}},
                                     status_code=401)

@@ -1,0 +1,8 @@
+# Copy to /etc/crypto-trader/tunnel-env, fill in, then:
+#   sudo chown root:crypto /etc/crypto-trader/tunnel-env
+#   sudo chmod 640 /etc/crypto-trader/tunnel-env
+#
+# THIS ONE IS A REAL SECRET. The token lets anything holding it create a tunnel into your
+# Cloudflare account. Treat it like a password: never commit it, and rotate it from the Cloudflare
+# dashboard if it is ever pasted anywhere it should not be.
+CLOUDFLARE_TUNNEL_TOKEN=

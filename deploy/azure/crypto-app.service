@@ -1,0 +1,41 @@
+# Process 2 of the specs/10 §3 topology: reads SQLite, evaluates strategies, serves the API.
+#
+# Deliberately NOT `Requires=crypto-ingest`. If this crash-loops, ingestion must keep recording —
+# a lost suggestion is recoverable, a lost hour of Tier B history is not. The two are independent
+# on purpose (specs/18).
+[Unit]
+Description=crypto-trader suggestion app and API
+Documentation=file:///opt/crypto-trader/HOSTING.md
+After=network-online.target crypto-ingest.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=crypto
+Group=crypto
+WorkingDirectory=/opt/crypto-trader
+EnvironmentFile=/etc/crypto-trader/env
+ExecStart=/opt/crypto-trader/.venv/bin/python -m app --serve
+
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=crypto-app
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+# Read-write on data/ because SQLite needs to create its WAL sidecar files even for readers.
+ReadWritePaths=/opt/crypto-trader/data /opt/crypto-trader/logs
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryMax=900M
+
+[Install]
+WantedBy=multi-user.target

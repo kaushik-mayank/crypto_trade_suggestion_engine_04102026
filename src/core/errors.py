@@ -371,6 +371,21 @@ class RenderError(CryptoTraderError):
     problem_class = ProblemClass.APPLICATION
 
 
+class BootstrapError(CryptoTraderError):
+    """Rebuilding history from the venue failed in a way that must not be worked around.
+
+    ``external_dependency`` rather than ``application_bug``: by the time this raises, the request has
+    already gone through the verified adapter and normalizer, so the usual cause is the venue serving
+    a window it will not serve again — not our code. The remediation is always the same shape, and it
+    is why the bootstrap is idempotent: re-run it, and it recomputes what is still missing from the
+    database rather than starting over.
+    """
+
+    code = "BOOTSTRAP_FAILURE"
+    problem_class = ProblemClass.EXTERNAL
+    retryable = True
+
+
 class BacktestError(CryptoTraderError):
     code = "BACKTEST_FAILURE"
     problem_class = ProblemClass.APPLICATION
@@ -394,5 +409,6 @@ ALL_ERRORS: tuple[type[CryptoTraderError], ...] = (
     FeatureError, FeatureNotAvailable, InvalidOHLC,
     RegimeError, StrategyError, SetupNotReady, RiskError, ImmutabilityViolation,
     AuditError, ReplayMismatch, ApiError, ServiceUnavailable, RenderError,
+    BootstrapError,
     BacktestError, ProtocolViolation,
 )

@@ -121,6 +121,7 @@ def main(argv: list[str] | None = None) -> int:
         signals, market, health = build_services(reader, health_source=runner.health)
         app = create_app(signals=signals, market=market, health=health,
                          host=settings.server.host, auth_token=settings.server.auth_token,
+                         public_via_tunnel=settings.server.public_via_tunnel,
                          regimes_source=lambda: {a: c.stats() for a, c in runner.classifiers.items()})
         evaluate_once()
         log.info("serving", host=settings.server.host, port=settings.server.port)

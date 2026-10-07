@@ -1082,6 +1082,90 @@ Two of twelve strategies — **C1-A and C2-C** — read Tier B exclusively and t
 backtested at all**. Not weakly: there is no data. They would reach shadow with no historical evidence
 whatsoever, which is recorded as an open question rather than resolved by running them anyway.
 
+---
+
+## F-040 — The repository is clean for publication: no secret has ever been committed ✅
+
+**Date:** 2026-10-04. **Check:** the `specs/18` §1 pre-push scan, run over the **entire** history
+rather than the working tree:
+
+```
+git log -p --all | grep -icE "(api[-_]?key|api[-_]?secret|x-auth-apikey|BEGIN RSA|BEGIN OPENSSH)"
+-> 22
+```
+
+Twenty-two matches, all inspected. Every one is a **variable name, a header name, documentation, a
+redaction test, or a test fixture with an obviously fake value** — `COINDCX_API_KEY` as an
+identifier, `X-AUTH-APIKEY` as a header, `"abc"` / `"def"` / `"k3y-val"` in tests, and the
+`SENSITIVE_HEADERS` set that exists to redact them. No real credential appears at any point in the
+history.
+
+Structurally confirmed too: `git ls-files` shows **0** files under `data/` and `.env` is not tracked.
+That matters more than it sounds — `data/` holds the holdout, and `specs/09` §1.2 requires it to stay
+out of any shared repository where it could be inspected before Stage 10.
+
+This is recorded because the check has to be *done*, not assumed, and because the answer changes what
+is safe: the repository can be public, which makes the Azure deploy a one-line `git clone` instead of
+a deploy key.
+
+---
+
+## F-041 — The history bootstrap, and an off-by-one that only a test could have found ✅
+
+**Date:** 2026-10-04. **Context:** hosting needs a fresh machine to rebuild price history from the
+API, because the 5.8 GB development database cannot be pushed to a repository (it holds the holdout)
+and copying it by hand is a step that can go wrong silently.
+
+`python -m bootstrap` does that. Measured on an **empty** database:
+
+```
+15 requests · 17,595 bars · ~20 seconds · 0 series incomplete
+  written final immediately   17,535
+  left for the live sweep         60
+```
+
+Then `ingest --once` (68 tasks, all OK) and `app --once` produced **5 signals in 350 ms**. So the
+whole fresh-host sequence — no data, no configuration beyond a token — reaches a working system in
+under a minute.
+
+### What the signals' vetoes confirmed
+
+On the fresh database the signals were declined for `PRICE_BAND`, `RR_FLOOR` and `FUNDING_ADVERSE` —
+**economic** vetoes. The backtest's zero-trade problem (Q-N) is `DQ_STALE` + `DQ_META`, which are
+*historical* data vetoes. Different causes, and this confirms the live path does not share the
+backtest's blocker.
+
+### The off-by-one
+
+`plan()` counted expected bars over `[start, now]`. When `now` lands exactly on a timeframe boundary
+that range includes the bar opening *at* `now` — which has not closed, cannot be fetched, and so is
+permanently missing. The consequences:
+
+* the plan would never report complete;
+* `bootstrap --check` would exit non-zero forever, so the health check would cry wolf;
+* a cron-driven `--run` would re-request the newest chunk on every pass.
+
+It did **not** show up in any live run, because the wall clock almost never lands exactly on an hour
+boundary. It showed up immediately in four tests that use a synthetic `T0` on a boundary. Fixed by
+ending the window at the newest **closed** bar, which is the same convention
+`SnapshotBuilder._series` already uses — so the bootstrap and the snapshot builder now agree about
+what "the latest bar" means instead of each having its own idea.
+
+### The finalization shortcut, and why it is defensible
+
+A bar becomes `is_final` only when a second fetch returns it unchanged, and
+`get_bars(final_only=True)` — what the snapshot builder uses — cannot see a non-final bar. A naive
+bootstrap therefore writes correct history that is **completely invisible**, which is F-036 again.
+
+The rule exists to catch a bar still forming or being revised. A bar that closed six months ago is
+neither, so the bootstrap writes bars older than three intervals **final on first fetch** and leaves
+the recent tail to the live `settle:` sweep. To keep that honest rather than merely convenient,
+`verify_chunk` re-requests a sample and compares **by value** (so a precision difference is not a
+difference, per F-037); any real mismatch fails the run with the window and field named, because
+writing history final on one fetch is only safe if a second fetch agrees.
+
+
+
 
 
 

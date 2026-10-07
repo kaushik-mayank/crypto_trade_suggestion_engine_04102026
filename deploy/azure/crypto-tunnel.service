@@ -1,0 +1,35 @@
+# Makes the API reachable by Vercel **without opening any inbound port**.
+#
+# cloudflared dials out to Cloudflare and traffic comes back down that connection, so the Azure
+# network security group stays deny-all inbound — which is the specs/18 rule the hosted dashboard
+# would otherwise break.
+#
+# The API still requires its token. The tunnel URL is unguessable, and unguessable is not
+# authentication: CT_SERVER__PUBLIC_VIA_TUNNEL=true makes the app refuse to start without one.
+[Unit]
+Description=cloudflared tunnel to the crypto-trader API
+Documentation=file:///opt/crypto-trader/HOSTING.md
+After=network-online.target crypto-app.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=crypto
+Group=crypto
+# --no-autoupdate: an unattended binary replacement on a machine you are not watching is a change
+# you did not make at a time you did not choose.
+ExecStart=/usr/local/bin/cloudflared tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+EnvironmentFile=/etc/crypto-trader/tunnel-env
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=crypto-tunnel
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

@@ -34,3 +34,13 @@ deploy/azure/*.local.*
 # NOT ignored, deliberately: validation/protocol.lock.json and validation/trial_count.json must be
 # committed — specs/09 §1.1 requires git history to prove the lock predates any backtest output,
 # and specs/19 §2 requires the trial counter to be append-only and public to the project.
+
+# Frontend (Vercel builds it; nothing built belongs in Git)
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.vercel/
+frontend/next-env.d.ts
+frontend/*.tsbuildinfo
+frontend/.env.local
+frontend/.env*.local

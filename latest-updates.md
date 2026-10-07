@@ -7,11 +7,11 @@
 |---|---|
 | **Last updated** | 2026-10-03 (all 14 strategies implemented; θ calibrated; backtest harness built; the ingest process and its finalization sweep landed) |
 | **Overall status** | **The system runs end to end locally and all 14 strategies are implemented.** `python -m app --once` evaluates 12 tradeable strategies across 3 assets in ~820 ms and writes the audit trail; `python -m ingest` keeps SQLite current; `python -m backtest` has a pre-registered protocol and a complete fill/accounting/metrics stack. **No backtest has produced results yet**, so nothing is validated and every signal still carries `validated: false` and the 0.4 multiplier. |
-| **Current phase** | `PHASE-26` complete (harness built, protocol locked). Next is **`PHASE-27`, the harness-integrity halt gate** — the first run that produces numbers. `PHASE-02A`/`PHASE-31` (Azure) remain **deferred** by owner instruction until the local system is exercised |
+| **Current phase** | **Hosting**, by owner instruction on 2026-10-04: the system goes to Azure in suggestion-only mode for a 72-hour observation run while the backtest's data problems are fixed in parallel. `PHASE-26` is complete and the protocol is locked; `PHASE-27` (harness integrity, a halt gate) is next for validation and is independent of hosting |
 | **Next action** | See [Next Action](#next-action). |
-| **Deployment target** | **Microsoft Azure** — single B-series Linux VM, Central India. See [§3A Azure architecture](#3a-azure-architecture-deployment-target). |
+| **Deployment target** | **Azure VM** (engine) + **Vercel** (dashboard) + **Cloudflare tunnel** (the link between them, with no inbound port). GitHub is the source of truth and the VM pulls from it. Step-by-step: **[`HOSTING.md`](HOSTING.md)**. Architecture rationale: [§3A](#3a-azure-architecture-deployment-target) and D-33…D-37. |
 | **Blocking gaps** | **None for implementation.** Three things limit *output*: the regime model is **degraded on BTC and SOL** (F-033), so their dwell-stability conditions are dropped; **Tier B has zero history**, so C1-A and C2-C cannot be backtested at all (specs/09 §13); and nothing has been backtested, so every signal carries `validated: false`. `swing_atr_multiple` is no longer among them — it was calibrated structurally at 0.75 (F-038) and the registry has **zero `unset` parameters**. |
-| **Quality gates** | **694 tests passing** · `ruff` clean · `mypy` clean across 129 source files |
+| **Quality gates** | **728 tests passing** · `ruff` clean · `mypy` clean across 133 source files |
 
 ---
 
@@ -1056,6 +1056,11 @@ against a fresh holdout; API-change drill.
 | **D-30** | Series staleness is checked **before** window depth, and the shortfall is named as its consequence | Both can be true at once, but `WARMING` reads as "the system is fine, give it time" and `EDGE_BEHIND` as "ingestion is dead". Reporting the reassuring one for a dead feed is how a stopped process goes unnoticed for a fortnight (F-035) |
 | **D-31** | Bar content is compared **by value**, with the hash as a fast path | `str(Decimal("105")) != str(Decimal("105.0"))`, so hashing the strings made the same price at a different precision look like a revision of history — a false `BAR_MUTATION` at ERROR, which also prevented the two-fetch rule from ever firing. The venue is already known to send inconsistent precision (invariant 6). Comparing values also means rows written before the fix do not all read as mutations the first time they are re-fetched (F-037) |
 | **D-32** | Backtest coverage reports a **Tier A fraction separately** from the strict one | Tier B has zero history, so every step of a historical window is "incomplete" for it — permanently and by design. A single `usable_fraction` reads 0% and makes a sound Tier A backtest look impossible, which is what the first real run reported (F-039). The Tier A *reasons* are shown in full because there are at most three and they are the actionable ones |
+| **D-33** | The hosted dashboard reaches the engine through a **Cloudflare tunnel**, not an opened port | The owner wants the UI on Vercel, which is public, while `specs/18` requires the Azure network security group to stay **deny-all inbound**. A tunnel resolves the conflict rather than trading one requirement for the other: `cloudflared` dials *outward* from the VM, so the API keeps its `127.0.0.1` bind and no inbound port is ever opened. The alternatives were worse — exposing 443 makes the token the only barrier, and Tailscale would mean the dashboard could not be hosted at all |
+| **D-34** | A declared tunnel makes the auth token **mandatory**, even on a loopback bind | The old guard demanded a token only for a non-loopback bind, because binding `127.0.0.1` *meant* unreachable. Behind a tunnel the process still binds loopback and is reachable from the internet, so that guard would have passed while the API sat open. `CT_SERVER__PUBLIC_VIA_TUNNEL` is the operator's declaration of what is in front of the process, because only they know. An unguessable tunnel URL is obscurity, not authentication |
+| **D-35** | The Vercel app is a **server-side proxy**, never a browser calling the engine | The shared token is read inside the proxy route, which runs on Vercel's server, so it never reaches the browser — a `NEXT_PUBLIC_` variable would be compiled into the JavaScript a visitor downloads. Three consequences fall out: the engine needs no CORS, the engine can stay on loopback, and the proxy forwards **GET only against an explicit allow-list**, so a future engine endpoint cannot become publicly reachable by accident |
+| **D-36** | The frontend duplicates the `specs/15` display rules, confined to one file and cross-checked from Python | Duplication is refused everywhere else in this project (one ACT, one trail, one cost model), and this is a real exception. It is accepted because the alternative is passing HTML strings across a network boundary into `dangerouslySetInnerHTML`, which cannot be type-checked at all. The mitigation is that it lives only in `frontend/lib/honesty.ts`, and `tests/test_frontend_contract.py` reads that file as text and asserts its thresholds and colour tokens match `src/api/render.py` — a check that runs in the suite that runs on every change, rather than in a Node toolchain that may not be installed |
+| **D-37** | A fresh host **rebuilds price history from the API**; local data is never copied up | The development database is 5.8 GB, holds the holdout, and is gitignored for that reason. Copying it by hand is a step that can be done wrong silently. `python -m bootstrap` is idempotent by construction — the plan is recomputed from the database each run, so there is no completion marker to go stale — and chunks are fetched **newest-first** so an interrupted run leaves the *recent* history complete, which is the half the live system needs to run at all |
 | **D-16** | Every ruff ignore carries an inline reason | The ignores are deliberate patterns (long-lived recorder handles, pairwise `zip`, `Kind(str, Enum)`), not unfixed warnings. An unexplained ignore is indistinguishable from neglect |
 
 ---
@@ -1196,6 +1201,19 @@ per D-15 and un-ignored as later phases touch them.
 | `validation/protocol.lock.json` | **New** — the pre-registration, version 1, 38 declared trials, 5 hypotheses |
 | `docs/findings.md` | **F-035** (stale edge reported as warming), **F-036** (non-final history invisible), **F-037** (precision as mutation), **F-038** (θ calibration + the criteria conflict), **F-039** (coverage by tier); Q11 |
 | `tests/` | **New** — `test_strategies.py` (62), `test_backtest.py` (52), `test_swing_calibration.py` (13); extended `test_store.py`, `test_ingest.py`, `test_snapshot.py`, `test_risk_arbitration.py` |
+
+### Hosting (2026-10-04)
+
+| Path | Change |
+|---|---|
+| `HOSTING.md` | **New** — the beginner-level, step-by-step hosting guide: Azure VM, GitHub deploy key, the two services, the tunnel, Vercel, and what to watch during the 72-hour run |
+| `src/bootstrap/{plan,fetch,__main__}.py` | **New** — rebuild price history from the venue into SQLite. Idempotent, resumable, newest-first (D-37) |
+| `frontend/` | **New** — the Next.js dashboard for Vercel. Server-side proxy, allow-listed GET only, token never in the browser (D-35) |
+| `deploy/azure/` | **New** — three systemd units (ingest / app / tunnel, deliberately independent), `env.example`, `tunnel-env.example`, `nsg-rules.md`, `update.sh`, `health-check.sh` |
+| `src/config/settings.py`, `src/api/app.py` | `public_via_tunnel` guard (D-34); the token comparison is now constant-time |
+| `src/core/errors.py` | Added `BootstrapError` (`external_dependency`, retryable) |
+| `.gitignore` | Frontend build output, `node_modules`, `.vercel`, `.env.local` |
+| `tests/` | **New** — `test_bootstrap.py` (19), `test_frontend_contract.py` (12); extended `test_api.py` with the tunnel-guard tests |
 
 ## Next Action
 

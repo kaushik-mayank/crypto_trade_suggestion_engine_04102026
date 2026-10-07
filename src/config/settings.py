@@ -107,6 +107,16 @@ class Server(BaseModel):
     host: str = "127.0.0.1"                # specs/10 §9 / specs/14 §11: localhost by default
     port: int = 8000
     auth_token: str = ""                   # required before any non-localhost bind is permitted
+    #: Set when a reverse proxy or tunnel forwards public traffic to this process — a Cloudflare
+    #: tunnel for the hosted dashboard, say.
+    #:
+    #: This exists because the bind address stopped being the whole story. Binding 127.0.0.1 used to
+    #: *mean* "unreachable from outside", so the token was only demanded for a non-loopback bind.
+    #: With a tunnel the process still binds loopback and is still reachable from the internet, so
+    #: the original guard would pass while the API sat open. Declaring the tunnel makes the token
+    #: mandatory again, and the declaration is the operator's to make because only they know what is
+    #: in front of the process.
+    public_via_tunnel: bool = False
 
 
 class Settings(BaseSettings):
@@ -129,13 +139,26 @@ class Settings(BaseSettings):
         return v
 
     def assert_bind_allowed(self) -> None:
-        """specs/14 §11: refuse a non-localhost bind without a token. Exposure without
-        authentication is not a supported configuration."""
-        if self.server.host not in ("127.0.0.1", "localhost", "::1") and not self.server.auth_token:
+        """specs/14 §11: refuse to be reachable without a token.
+
+        Two ways to be reachable, and both are checked. A non-loopback bind is the obvious one. The
+        second is a declared tunnel: the process still binds loopback, so the old check passed while
+        the API was being forwarded to the public internet. Exposure without authentication is not a
+        supported configuration however the traffic arrives.
+        """
+        loopback = self.server.host in ("127.0.0.1", "localhost", "::1")
+        if not loopback and not self.server.auth_token:
             raise RuntimeError(
                 f"refusing to bind {self.server.host}: a non-localhost bind requires CT_SERVER__AUTH_TOKEN "
                 "(specs/14 §11). On Azure, keep the localhost bind and reach the dashboard over "
                 "Tailscale/WireGuard or an SSH tunnel instead of opening a port."
+            )
+        if self.server.public_via_tunnel and not self.server.auth_token:
+            raise RuntimeError(
+                "refusing to serve through a tunnel without CT_SERVER__AUTH_TOKEN. The bind address "
+                "is loopback, but CT_SERVER__PUBLIC_VIA_TUNNEL says something public forwards to "
+                "this process, so loopback no longer means unreachable. Set a long random token; "
+                "the tunnel URL being hard to guess is not authentication."
             )
 
 
